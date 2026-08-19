@@ -1,0 +1,17 @@
+# Run the pre-built images from GitHub Container Registry — no local build needed.
+#   docker compose -f docker-compose.ghcr.yml up
+# Images are published by .github/workflows/docker-publish.yml on every push to main.
+services:
+  backend:
+    image: ghcr.io/ismoiljon1101/async-url-checker-backend:latest
+    ports:
+      - "3000:3000"
+    environment:
+      MAX_CHECK_DELAY_MS: "10000"
+
+  frontend:
+    image: ghcr.io/ismoiljon1101/async-url-checker-frontend:latest
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend

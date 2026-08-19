@@ -17,6 +17,16 @@ docker compose up --build
 
 nginx serves the built frontend and proxies `/api` to the backend, so the browser talks to one origin.
 
+### Pre-built images (no local build)
+
+CI publishes both images to GitHub Container Registry on every push to `main`. To run them without building anything:
+
+```bash
+docker compose -f docker-compose.ghcr.yml up
+```
+
+Same URLs as above. Images live at `ghcr.io/ismoiljon1101/async-url-checker-backend` and `-frontend`.
+
 ### Local (two terminals)
 
 ```bash
