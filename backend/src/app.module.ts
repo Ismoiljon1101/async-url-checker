@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { JobsModule } from './jobs/jobs.module';
+import { HealthModule } from './components/health/health.module';
+import { JobsModule } from './components/jobs/jobs.module';
 
 /** Root module. Composes the feature modules of the app. */
 @Module({
-  imports: [JobsModule],
+  imports: [JobsModule, HealthModule],
 })
 export class AppModule {}

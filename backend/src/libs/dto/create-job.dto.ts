@@ -2,6 +2,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsNotEmpty,
   IsString,
 } from 'class-validator';
 
@@ -14,5 +15,6 @@ export class CreateJobDto {
   @ArrayMinSize(1, { message: 'Provide at least one URL' })
   @ArrayMaxSize(1000, { message: 'A job is capped at 1000 URLs' })
   @IsString({ each: true })
+  @IsNotEmpty({ each: true, message: 'URLs must not be blank' })
   urls!: string[];
 }

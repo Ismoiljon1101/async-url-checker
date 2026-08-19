@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Job } from './types';
+import { Job } from '../../libs/types';
 
 /**
  * In-memory job store. This is the persistence boundary: the service talks only
@@ -20,10 +20,13 @@ export class JobsRepository {
     return this.jobs.get(id);
   }
 
-  /** All jobs, newest first. */
+  /**
+   * All jobs, newest first. A Map preserves insertion order and jobs are saved
+   * in creation order, so reversing is O(n) with no comparisons — cheaper and
+   * more deterministic than sorting on createdAt (same-millisecond ties keep a
+   * stable order).
+   */
   findAll(): Job[] {
-    return [...this.jobs.values()].sort((a, b) =>
-      b.createdAt.localeCompare(a.createdAt),
-    );
+    return [...this.jobs.values()].reverse();
   }
 }

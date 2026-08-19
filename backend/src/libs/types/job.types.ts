@@ -32,6 +32,11 @@ export interface Job {
   createdAt: string;
   updatedAt: string;
   results: UrlResult[];
+  /**
+   * Running per-URL tallies, updated on each status transition. Kept in sync so
+   * a summary is O(1) instead of an O(n) scan of `results` on every poll.
+   */
+  stats: UrlStats;
   /** Cancels every in-flight and queued check for this job. */
   abort: AbortController;
 }

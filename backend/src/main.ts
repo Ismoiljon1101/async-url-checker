@@ -1,12 +1,13 @@
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { AllExceptionsFilter } from './libs/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({ origin: true });
+  app.enableShutdownHooks();
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalPipes(
     new ValidationPipe({
@@ -18,8 +19,7 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT) || 3000;
   await app.listen(port);
-  // eslint-disable-next-line no-console
-  console.log(`URL-checker API listening on http://localhost:${port}`);
+  new Logger('Bootstrap').log(`URL-checker API listening on port ${port}`);
 }
 
 void bootstrap();
