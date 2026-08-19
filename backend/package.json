@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Asynchronous URL-checking service (NestJS, in-memory)",
   "license": "UNLICENSED",
+  "packageManager": "pnpm@10.29.2",
   "scripts": {
     "build": "nest build",
     "start": "nest start",
