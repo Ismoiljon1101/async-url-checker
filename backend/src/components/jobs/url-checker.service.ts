@@ -4,8 +4,13 @@ import { UrlStatus } from '../../libs/enums';
 import { UrlResult } from '../../libs/types';
 import { toHttpUrl } from '../../libs/utils/url';
 
-/** Concurrency is fixed at 5 by the spec. */
-export const MAX_CONCURRENCY = 5;
+/**
+ * Concurrency is 5 by the spec. It's env-tunable (MAX_CONCURRENCY) only so the
+ * value can be raised for local load-testing; the default keeps every job at
+ * the required 5 concurrent checks. This is an I/O-bound wait, not CPU work, so
+ * one event loop handles it — extra cores or worker threads add nothing.
+ */
+export const DEFAULT_CONCURRENCY = 5;
 
 /**
  * HEAD is retried with GET on these statuses: some servers reject HEAD at the
@@ -46,13 +51,16 @@ export class UrlCheckerService {
   ): Promise<void> {
     await runWithConcurrency(
       results,
-      MAX_CONCURRENCY,
+      this.concurrency(),
       (result) => this.checkOne(result, signal, setStatus),
       signal,
     );
   }
 
-  // Read at call time (not import time) so tests can override via env.
+  // Read at call time (not import time) so tests/load runs can override via env.
+  private concurrency(): number {
+    return Number(process.env.MAX_CONCURRENCY ?? DEFAULT_CONCURRENCY);
+  }
   private maxDelayMs(): number {
     return Number(process.env.MAX_CHECK_DELAY_MS ?? 10_000);
   }
