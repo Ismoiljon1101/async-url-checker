@@ -1,5 +1,7 @@
 # URL Checker
 
+**English** · [Русский](README.ru.md)
+
 A small service that checks a batch of URLs asynchronously and shows you the result as it happens. You paste a list of URLs, the backend fires a HEAD request at each one, and the UI polls for progress until every URL has a verdict. Checks run five at a time, and you can cancel a job mid-flight.
 
 Built with the stack from the brief: Node.js + TypeScript + NestJS on the back, React + TypeScript + Zustand on the front. Data lives in memory, no database.
@@ -54,7 +56,7 @@ Seven tests cover the parts that are easy to get wrong: the concurrency cap, can
 
 ## API
 
-Base path `/api/jobs`. Every response uses the same status vocabulary defined in `schema/job.enums.ts`.
+Base path `/api/jobs`. Every response uses the same status vocabulary defined in `libs/enums`.
 
 | Method | Path | Does |
 | --- | --- | --- |
@@ -77,23 +79,39 @@ curl -X POST http://localhost:3000/api/jobs \
 
 ### Schema first
 
-Each side starts from a `schema/` folder, and the schema starts from enums. `job.enums.ts` defines the legal states, `job.model.ts` builds the types on top of them, and the DTO validates the one thing that comes from outside. Nothing downstream invents its own string for "completed". The frontend mirrors the same enums so both apps speak one language over the wire.
+Types start from enums. `job-status.enum.ts` and `url-status.enum.ts` define the legal states, the model types build on them, and the DTO validates the one thing that comes from outside. Nothing downstream invents its own string for "completed". The frontend mirrors the same enums, so both apps speak one language over the wire.
 
 ### Layout
 
+Backend follows NestJS's module system: feature modules under `components/`, shared code under `libs/`, and a thin root module.
+
 ```
-backend/src/jobs/
-  controllers/   routes only, thin pass-through to services
-  services/      business logic (job lifecycle + the checker)
-  schema/        enums, models, DTOs
+backend/src/
+  app.module.ts          root module, imports the feature modules
+  main.ts                bootstrap (CORS, ValidationPipe, exception filter)
+  components/
+    jobs/                the jobs feature module
+      jobs.controller.ts   routes only
+      jobs.service.ts      lifecycle orchestration
+      jobs.repository.ts   in-memory store (persistence boundary)
+      url-checker.service.ts  HEAD checks, 5-way pool, cancel
+      jobs.module.ts       wires it together via DI
+  libs/                  shared across features
+    dto/ enums/ types/   request schema, status vocabulary, domain types
+    utils/               generic concurrency pool, URL normalizer
+    filters/             global exception filter
+
 frontend/src/
-  schema/        enums + models, mirroring the backend
-  components/    form, list, detail view
-  store.ts       Zustand store + the polling loop
-  api.ts         typed fetch wrapper
+  features/jobs/         api, store, components, types for the jobs feature
+  shared/                http client, UI (StatusBadge, language switch), i18n
+  app/  styles/
 ```
 
-Controllers hold no logic. `JobsService` owns state transitions and the in-memory store; `UrlCheckerService` owns the actual checking. Splitting them means the concurrency and cancellation logic is tested on its own, without HTTP in the way.
+`JobsService` owns state transitions, `JobsRepository` owns storage, `UrlCheckerService` owns the actual checking. Splitting them means the concurrency and cancellation logic is tested on its own, without HTTP in the way.
+
+### Bilingual UI
+
+The interface ships in English and Russian. The switch in the header persists your choice and the app also picks up the browser language on first load. Strings live in one dictionary (`shared/i18n`), keyed and typed so a missing translation is a compile error.
 
 ### Concurrency and cancellation
 
@@ -112,3 +130,4 @@ The store runs two intervals outside React so they survive re-renders. The list 
 - In-memory by design, per the brief. Jobs reset when the backend restarts. Moving to Redis or Postgres would be a store swap behind `JobsService`, nothing above it changes.
 - HEAD is the right call for a liveness check since it skips the body. A few hosts answer HEAD oddly or refuse it. When that happens the URL comes back failed with the error, which is the honest result for a checker.
 - The simulated delay is env-tunable (`MAX_CHECK_DELAY_MS`) so tests run instantly and you can watch the concurrency limit work without waiting.
+- A bare host like `google.com` is normalized to `https://google.com` before the check, since `fetch` needs an absolute URL.
