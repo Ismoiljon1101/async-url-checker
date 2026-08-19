@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { JobStatus, UrlStatus } from '../src/jobs/enums';
-import { JobsRepository } from '../src/jobs/jobs.repository';
-import { JobsService } from '../src/jobs/jobs.service';
-import { UrlCheckerService } from '../src/jobs/url-checker.service';
+import { JobStatus, UrlStatus } from '../src/libs/enums';
+import { JobsRepository } from '../src/components/jobs/jobs.repository';
+import { JobsService } from '../src/components/jobs/jobs.service';
+import { UrlCheckerService } from '../src/components/jobs/url-checker.service';
 
 // The service is wired with its real collaborators (repository + checker), the
 // same graph the module builds. `fetch` is mocked and the delay is forced to 0
@@ -102,6 +102,22 @@ describe('JobsService', () => {
     assert.match(result.error ?? '', /ENOTFOUND/);
   });
 
+  it('normalizes a bare host to https before checking', async () => {
+    let requested: string | null = null;
+    mockFetch(async (input) => {
+      requested = String(input);
+      return new Response(null, { status: 200 });
+    });
+
+    const created = service.create(['google.com']);
+    await waitForTerminal(service, created.id);
+
+    const [result] = service.detail(created.id).results;
+    assert.equal(result.url, 'https://google.com');
+    assert.equal(requested, 'https://google.com');
+    assert.equal(result.status, UrlStatus.Success);
+  });
+
   it('never runs more than 5 checks at once', async () => {
     let inFlight = 0;
     let peak = 0;
@@ -122,10 +138,12 @@ describe('JobsService', () => {
   });
 
   it('cancels an in-flight job and finalizes remaining URLs', async () => {
-    // fetch that hangs until aborted, so the job stays in progress.
+    // fetch that hangs until aborted, so the checks are genuinely in flight.
+    let inFlight = 0;
     mockFetch(
       (_input, init) =>
         new Promise((_resolve, reject) => {
+          inFlight++;
           init?.signal?.addEventListener('abort', () =>
             reject(new DOMException('Aborted', 'AbortError')),
           );
@@ -138,6 +156,12 @@ describe('JobsService', () => {
       'https://z.test',
     ]);
 
+    // Let the deferred process() start and the fetches go in flight BEFORE we
+    // cancel — otherwise we'd only be testing the pending-cancel path.
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setTimeout(r, 10));
+    assert.ok(inFlight > 0, 'expected in-flight fetches before cancel');
+
     const cancelled = service.cancel(created.id);
     assert.equal(cancelled.status, JobStatus.Cancelled);
 
@@ -147,6 +171,53 @@ describe('JobsService', () => {
       assert.equal(r.status, UrlStatus.Failed);
       assert.equal(r.error, 'Cancelled');
     }
+  });
+
+  it('rejects a non-http URL with a clean error', async () => {
+    mockFetch(async () => new Response(null, { status: 200 }));
+
+    const created = service.create(['ftp://files.test', 'not a url']);
+    await waitForTerminal(service, created.id);
+
+    const results = service.detail(created.id).results;
+    for (const r of results) {
+      assert.equal(r.status, UrlStatus.Failed);
+      assert.equal(r.error, 'Invalid URL');
+      assert.equal(r.httpStatus, null);
+    }
+  });
+
+  it('keeps aggregate stats consistent across a mixed run', async () => {
+    let n = 0;
+    mockFetch(async () => new Response(null, { status: n++ % 2 === 0 ? 200 : 500 }));
+
+    const created = service.create(['a.test', 'b.test', 'c.test', 'd.test']);
+    await waitForTerminal(service, created.id);
+
+    const s = service.detail(created.id).stats;
+    assert.equal(s.total, 4);
+    assert.equal(s.pending, 0);
+    assert.equal(s.inProgress, 0);
+    assert.equal(s.success + s.failed, 4);
+    // the incremental counters must always sum back to total
+    assert.equal(s.pending + s.inProgress + s.success + s.failed, s.total);
+  });
+
+  it('cancel drives every URL into the failed tally', () => {
+    mockFetch(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          );
+        }),
+    );
+
+    const created = service.create(['x.test', 'y.test', 'z.test']);
+    const s = service.cancel(created.id).stats;
+    assert.equal(s.failed, 3);
+    assert.equal(s.pending, 0);
+    assert.equal(s.inProgress, 0);
   });
 
   it('lists jobs newest-first', async () => {
