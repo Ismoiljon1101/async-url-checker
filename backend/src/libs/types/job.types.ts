@@ -37,6 +37,11 @@ export interface Job {
    * a summary is O(1) instead of an O(n) scan of `results` on every poll.
    */
   stats: UrlStats;
+  /**
+   * Monotonic revision, bumped on every change. Backs the ETag so a poll that
+   * finds nothing new gets a 304 and the server skips serializing the job.
+   */
+  version: number;
   /** Cancels every in-flight and queued check for this job. */
   abort: AbortController;
 }

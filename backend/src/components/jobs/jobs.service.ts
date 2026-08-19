@@ -28,6 +28,8 @@ const STATS_KEY: Record<UrlStatus, keyof Omit<UrlStats, 'total'>> = {
 @Injectable()
 export class JobsService {
   private readonly logger = new Logger(JobsService.name);
+  /** Bumped on every job change; backs the list ETag. */
+  private globalVersion = 0;
 
   constructor(
     private readonly repository: JobsRepository,
@@ -50,6 +52,7 @@ export class JobsService {
       updatedAt: now,
       abort: new AbortController(),
       results,
+      version: 0,
       stats: {
         total: results.length,
         pending: results.length,
@@ -59,6 +62,7 @@ export class JobsService {
       },
     };
     this.repository.save(job);
+    this.globalVersion += 1; // the job set changed → invalidate the list ETag
 
     // Snapshot the summary while the job is still `pending`, then defer the run
     // to the next tick. POST returns `pending` (per spec); the client polls and
@@ -142,7 +146,7 @@ export class JobsService {
     job.stats[STATS_KEY[from]] -= 1;
     job.stats[STATS_KEY[next]] += 1;
     result.status = next;
-    job.updatedAt = new Date().toISOString();
+    this.touch(job);
   }
 
   private getOrThrow(id: string): Job {
@@ -153,7 +157,25 @@ export class JobsService {
 
   private setJobStatus(job: Job, status: JobStatus): void {
     job.status = status;
+    this.touch(job);
+  }
+
+  /** Bumps the job revision (and the global one) on every change. */
+  private touch(job: Job): void {
+    job.version += 1;
+    this.globalVersion += 1;
     job.updatedAt = new Date().toISOString();
+  }
+
+  /** Weak ETag for the list — changes whenever any job changes. */
+  listEtag(): string {
+    return `W/"jobs-${this.globalVersion}"`;
+  }
+
+  /** Weak ETag for one job — changes only when that job changes. */
+  detailEtag(id: string): string {
+    const job = this.getOrThrow(id);
+    return `W/"${job.id}-${job.version}"`;
   }
 
   private wasCancelled(job: Job): boolean {
