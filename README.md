@@ -121,9 +121,19 @@ Every job owns one `AbortController`. Cancelling aborts it, which cuts the artif
 
 The `POST` returns `pending` on purpose. The run is deferred to the next tick, so the client gets its job id back before any check starts, then watches it move.
 
-### Polling
+### Polling, made cheap with ETags
 
 The store runs two intervals outside React so they survive re-renders. The list refreshes every two seconds. The open job refreshes every second and stops the moment it reaches a terminal status. Switching jobs clears the old detail right away and ignores any late response from the job you just left, so a slow reply never paints over the job you are now looking at.
+
+Each GET carries a version-based `ETag` (a per-job counter, and a global one for the list). The client sends `If-None-Match`; when nothing changed the server returns `304` with an empty body and never serializes the response. A finished job that the UI keeps polling costs a few header bytes instead of a full payload each tick. The version compare is O(1), so it beats a body-hash ETag too.
+
+### Bounded memory
+
+The store is a `Map` used as an ordered structure. Newest-first is a reverse, not a sort. Retained jobs are capped (`MAX_JOBS`, default 500); once over the cap the oldest *finished* job is evicted, so a long-lived process stays bounded and an active job is never dropped mid-run. Per-URL tallies are counters updated on each transition, so a summary is O(1) rather than an O(n) rescan.
+
+### Why not multiple cores
+
+The checking is I/O-bound — it waits on sockets, so one event loop already runs many requests at once and extra cores or worker threads add nothing. The concurrency cap (5) and the artificial delay are the spec, and they are what set the wall-clock for a large batch, not CPU. In-memory storage also rules out clustering: separate processes would hold separate maps. Both `MAX_CONCURRENCY` and `MAX_CHECK_DELAY_MS` are env-tunable for local load runs; the defaults are the spec's 5 and 0–10s.
 
 ## Notes
 
