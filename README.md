@@ -52,7 +52,7 @@ cd backend
 pnpm test
 ```
 
-28 tests cover the parts that are easy to get wrong: the HEAD method, the concurrency cap (including the case where an env var tries to raise it), the artificial delay, cancellation, HTTP-code handling, URL normalization, every one of the six job statuses, the store's memory bound, and conditional-GET matching. They run against the services directly with `fetch` mocked, so the whole suite finishes in about a second.
+32 tests cover the parts that are easy to get wrong: the HEAD method, the concurrency cap (including the case where an env var tries to raise it), the artificial delay, cancellation, HTTP-code handling, URL normalization, all five job statuses and the `error` / `cancelled` split on URLs, the store's memory bound, and conditional-GET matching. They run against the services directly with `fetch` mocked, so the whole suite finishes in a couple of seconds.
 
 ## API
 
@@ -152,6 +152,6 @@ The checking is I/O-bound — it waits on sockets, so one event loop already run
 ## Notes
 
 - In-memory by design, per the brief. Jobs reset when the backend restarts. Moving to Redis or Postgres would be a store swap behind `JobsService`, nothing above it changes.
-- HEAD is the right call for a liveness check since it skips the body. A few hosts answer HEAD oddly or refuse it. When that happens the URL comes back failed with the error, which is the honest result for a checker.
+- HEAD is the right call for a liveness check since it skips the body. A few hosts answer HEAD oddly or refuse it. When that happens the URL comes back `error` with the message, which is the honest result for a checker.
 - The simulated delay is env-tunable (`MAX_CHECK_DELAY_MS`) so tests run instantly and you can watch the concurrency limit work without waiting.
 - A bare host like `google.com` is normalized to `https://google.com` before the check, since `fetch` needs an absolute URL.

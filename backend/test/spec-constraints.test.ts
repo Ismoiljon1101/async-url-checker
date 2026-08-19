@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { JobStatus } from '../src/libs/enums';
+import { JobStatus, UrlStatus } from '../src/libs/enums';
 import type { Job } from '../src/libs/types';
 import { JobsRepository } from '../src/components/jobs/jobs.repository';
 import { JobsService } from '../src/components/jobs/jobs.service';
@@ -256,7 +256,15 @@ describe('Store bound and admission', () => {
 
   it('rejects creation instead of growing without bound', () => {
     process.env.MAX_JOBS = '1';
-    mockFetch(async () => new Promise<Response>(() => undefined)); // never settles
+    // Hangs until aborted, so the test does not wait out the request timeout.
+    mockFetch(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          ),
+        ),
+    );
 
     const service = buildService();
     service.create(['https://busy.test']);
@@ -288,5 +296,86 @@ describe('Conditional GET (RFC 9110 weak comparison)', () => {
     // their cached validators. A bare counter climbing back through the same
     // numbers would answer 304 for a list that no longer exists.
     assert.match(buildService().listEtag(), /^W\/"jobs-[0-9a-f]{8}-\d+"$/);
+  });
+});
+
+describe('Assignment response contract', () => {
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('answers POST with a jobId field', () => {
+    // The assignment spells the response out: { "jobId": "..." }.
+    mockFetch(async () => new Response(null, { status: 200 }));
+    const created = buildService().create(['https://a.test']);
+
+    assert.equal(typeof created.jobId, 'string');
+    assert.equal(created.jobId, created.id);
+    assert.equal(created.status, JobStatus.Pending);
+  });
+
+  it('gives every URL a start time, an end time and a matching duration', async () => {
+    mockFetch(async () => new Response(null, { status: 200 }));
+    const service = buildService();
+    const created = service.create(['https://t1.test', 'https://t2.test']);
+    await waitForTerminal(service, created.id);
+
+    for (const r of service.detail(created.id).results) {
+      assert.ok(r.startedAt, 'startedAt');
+      assert.ok(r.finishedAt, 'finishedAt');
+      assert.ok(r.requestMs !== null, 'requestMs');
+      const span =
+        new Date(r.finishedAt as string).getTime() -
+        new Date(r.startedAt as string).getTime();
+      assert.equal(r.durationMs, span, 'durationMs spans the two timestamps');
+    }
+  });
+
+  it('uses error, not failed, for a URL that came back bad', async () => {
+    mockFetch(async () => new Response(null, { status: 503 }));
+    const service = buildService();
+    const created = service.create(['https://bad.test']);
+    await waitForTerminal(service, created.id);
+
+    const [result] = service.detail(created.id).results;
+    assert.equal(result.status, UrlStatus.Error);
+    assert.equal(result.error, 'HTTP 503');
+  });
+
+  it('marks an unstarted URL cancelled, and leaves finished ones alone', async () => {
+    let settled = 0;
+    // The first check answers; the rest hang until the job's signal aborts, so
+    // the suite never waits out the real request timeout.
+    mockFetch(async (_input, init) => {
+      settled += 1;
+      if (settled > 1) {
+        await new Promise<void>((resolve) =>
+          init?.signal?.addEventListener('abort', () => resolve(), { once: true }),
+        );
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      return new Response(null, { status: 200 });
+    });
+
+    const service = buildService();
+    const created = service.create([
+      'https://one.test',
+      'https://two.test',
+      'https://three.test',
+    ]);
+    await new Promise((r) => setTimeout(r, 40));
+    service.cancel(created.id);
+
+    const job = service.detail(created.id);
+    const statuses = job.results.map((r) => r.status);
+    assert.equal(job.status, JobStatus.Cancelled);
+    assert.ok(statuses.includes(UrlStatus.Success), 'the finished check is kept');
+    assert.ok(statuses.includes(UrlStatus.Cancelled), 'the rest are cancelled');
+    assert.equal(job.stats.error, 0, 'nothing is booked as an error');
+    assert.equal(
+      job.stats.success + job.stats.cancelled,
+      job.stats.total,
+      'the tallies still add up',
+    );
   });
 });
