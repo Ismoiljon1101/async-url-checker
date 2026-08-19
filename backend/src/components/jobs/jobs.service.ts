@@ -189,10 +189,12 @@ export class JobsService {
       return;
     }
     if (!isTerminalUrlStatus(next)) return;
+    // A URL that never started (pending → cancelled) has no timing: leave both
+    // marks null rather than stamping a finishedAt with no startedAt, which
+    // would make finishedAt - startedAt garbage and durationMs disagree.
+    if (!result.startedAt) return;
     result.finishedAt = now.toISOString();
-    result.durationMs = result.startedAt
-      ? now.getTime() - new Date(result.startedAt).getTime()
-      : 0;
+    result.durationMs = now.getTime() - new Date(result.startedAt).getTime();
   }
 
   private getOrThrow(id: string): Job {

@@ -114,18 +114,22 @@ export class UrlCheckerService {
       if (signal.aborted) return; // cancelled while awaiting; leave finalized
       result.httpStatus = response.status;
       result.error = response.ok ? null : `HTTP ${response.status}`;
+      // Stamp requestMs in the SAME synchronous tick as the status change, so
+      // the version bump in transition() covers it. Writing it later (e.g. in a
+      // finally that runs after an abort-return) would change the body without
+      // bumping the ETag → a stale 304. Just the HEAD request; the total time
+      // incl. the artificial delay is stamped by the service via timestamps.
+      result.requestMs = Date.now() - startedAt;
       setStatus(result, response.ok ? UrlStatus.Success : UrlStatus.Error);
     } catch (err) {
       if (signal.aborted) return; // cancel() already finalized this URL
       result.httpStatus = null;
       result.error = this.describeError(err);
+      result.requestMs = Date.now() - startedAt;
       setStatus(result, UrlStatus.Error);
     } finally {
       clearTimeout(timer);
       signal.removeEventListener('abort', onCancel);
-      // Just the HEAD request. Total processing time, artificial delay
-      // included, is stamped by the service alongside the timestamps.
-      result.requestMs = Date.now() - startedAt;
     }
   }
 
