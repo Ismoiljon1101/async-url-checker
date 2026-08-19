@@ -25,7 +25,11 @@ export default function App() {
         <p className="muted">{t('app.subtitle')}</p>
       </header>
 
-      {error && <div className="alert">{error}</div>}
+      {error && (
+        <div className="alert" role="alert">
+          {error}
+        </div>
+      )}
 
       <div className="layout">
         <div className="layout__left">

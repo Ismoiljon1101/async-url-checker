@@ -27,6 +27,7 @@ const en = {
   'detail.loading': 'Loading…',
   'detail.cancel': 'Cancel job',
   'detail.progress': 'Overall progress',
+  'a11y.language': 'Language',
 
   'table.url': 'URL',
   'table.status': 'Status',
@@ -69,6 +70,7 @@ const ru: Record<TranslationKey, string> = {
   'detail.loading': 'Загрузка…',
   'detail.cancel': 'Отменить задачу',
   'detail.progress': 'Общий прогресс',
+  'a11y.language': 'Язык',
 
   'table.url': 'URL',
   'table.status': 'Статус',

@@ -47,11 +47,15 @@ export function JobDetail() {
   // "X of Y processed" counts URLs that actually got a verdict. A cancelled
   // URL was never checked, so it is reported separately rather than folded in.
   const checked = stats.success + stats.error;
-  // floor, not round: 199/200 must not display as a finished 100%.
-  const pct = stats.total
-    ? Math.min(100, Math.floor((checked / stats.total) * 100))
-    : 0;
   const active = !isTerminal(job.status);
+  // A terminal job is 100% done (a cancelled job left some URLs unchecked, but
+  // the job itself is finished). While running: floor, not round, so 199/200
+  // never displays as a finished 100%.
+  const pct = active
+    ? stats.total
+      ? Math.min(100, Math.floor((checked / stats.total) * 100))
+      : 0
+    : 100;
 
   return (
     <section className="detail">
@@ -68,6 +72,7 @@ export function JobDetail() {
               ok: stats.success,
               failed: stats.error,
             })}
+            {stats.cancelled ? t('stats.cancelled', { n: stats.cancelled }) : ''}
           </p>
         </div>
         {active && (
@@ -91,11 +96,11 @@ export function JobDetail() {
       <table className="results">
         <thead>
           <tr>
-            <th>{t('table.url')}</th>
-            <th>{t('table.status')}</th>
-            <th className="cell-num">{t('table.http')}</th>
-            <th className="cell-num">{t('table.time')}</th>
-            <th>{t('table.error')}</th>
+            <th scope="col">{t('table.url')}</th>
+            <th scope="col">{t('table.status')}</th>
+            <th scope="col" className="cell-num">{t('table.http')}</th>
+            <th scope="col" className="cell-num">{t('table.time')}</th>
+            <th scope="col">{t('table.error')}</th>
           </tr>
         </thead>
         <tbody>

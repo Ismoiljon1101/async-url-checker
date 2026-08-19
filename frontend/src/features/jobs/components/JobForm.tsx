@@ -18,6 +18,8 @@ export function JobForm() {
   const [raw, setRaw] = useState('');
   const creating = useJobsStore((s) => s.creating);
   const createJob = useJobsStore((s) => s.createJob);
+  const formError = useJobsStore((s) => s.formError);
+  const clearFormError = useJobsStore((s) => s.clearFormError);
 
   const urls = parseUrls(raw);
 
@@ -40,9 +42,17 @@ export function JobForm() {
         rows={6}
         placeholder={PLACEHOLDER}
         value={raw}
-        onChange={(e) => setRaw(e.target.value)}
+        onChange={(e) => {
+          setRaw(e.target.value);
+          clearFormError();
+        }}
         spellCheck={false}
       />
+      {formError && (
+        <div className="alert alert--form" role="alert">
+          {formError}
+        </div>
+      )}
       <div className="form__actions">
         <span className="muted">{t('form.count', { n: urls.length })}</span>
         <button className="btn btn--primary" disabled={!urls.length || creating}>

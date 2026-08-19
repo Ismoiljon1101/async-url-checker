@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -44,11 +45,18 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const setLang = useCallback((next: Lang) => {
     setLangState(next);
     localStorage.setItem(STORAGE_KEY, next);
-    document.documentElement.lang = next;
   }, []);
 
+  // Keep <html lang> in sync on first paint and every change, for screen
+  // readers and SEO (the initial language can come from navigator.language).
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   const t = useCallback<Translate>(
-    (key, params) => interpolate(translations[lang][key], params),
+    // Fall back to the key if a translation is somehow missing, so an
+    // unexpected status from the server degrades to a label instead of crashing.
+    (key, params) => interpolate(translations[lang][key] ?? String(key), params),
     [lang],
   );
 
