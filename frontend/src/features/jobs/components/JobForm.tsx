@@ -24,8 +24,9 @@ export function JobForm() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!urls.length || creating) return;
-    await createJob(urls);
-    setRaw('');
+    // Keep the textarea intact when the server rejects the batch — losing a
+    // pasted list of 300 URLs to a validation error is unforgivable.
+    if (await createJob(urls)) setRaw('');
   };
 
   return (

@@ -25,6 +25,7 @@ const en = {
   'detail.selectPrompt': 'Select a job to see its URLs.',
   'detail.loading': 'Loading…',
   'detail.cancel': 'Cancel job',
+  'detail.progress': 'Overall progress',
 
   'table.url': 'URL',
   'table.status': 'Status',
@@ -64,6 +65,7 @@ const ru: Record<TranslationKey, string> = {
   'detail.selectPrompt': 'Выберите задачу, чтобы увидеть её URL.',
   'detail.loading': 'Загрузка…',
   'detail.cancel': 'Отменить задачу',
+  'detail.progress': 'Общий прогресс',
 
   'table.url': 'URL',
   'table.status': 'Статус',

@@ -36,7 +36,10 @@ export function JobDetail() {
 
   const { stats } = job;
   const checked = stats.success + stats.failed;
-  const pct = stats.total ? Math.round((checked / stats.total) * 100) : 0;
+  // floor, not round: 199/200 must not display as a finished 100%.
+  const pct = stats.total
+    ? Math.min(100, Math.floor((checked / stats.total) * 100))
+    : 0;
   const active = !isTerminal(job.status);
 
   return (
@@ -63,7 +66,14 @@ export function JobDetail() {
         )}
       </header>
 
-      <div className="progress" aria-label={`${pct}% complete`}>
+      <div
+        className="progress"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={t('detail.progress')}
+      >
         <div className="progress__bar" style={{ width: `${pct}%` }} />
       </div>
 
