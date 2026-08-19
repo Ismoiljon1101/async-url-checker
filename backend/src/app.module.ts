@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { JobsModule } from './modules/jobs/jobs.module';
+import { JobsModule } from './jobs/jobs.module';
 
 /** Root module. Composes the feature modules of the app. */
 @Module({

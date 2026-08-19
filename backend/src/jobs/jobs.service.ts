@@ -1,14 +1,14 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { v4 as uuid } from 'uuid';
-import { JobStatus, UrlStatus } from '../enums';
-import { JobsRepository } from '../repositories/jobs.repository';
+import { JobStatus, UrlStatus } from './enums';
+import { JobsRepository } from './jobs.repository';
 import {
   Job,
   JobDetail,
   JobSummary,
   UrlResult,
   UrlStats,
-} from '../types';
+} from './types';
 import { UrlCheckerService } from './url-checker.service';
 
 /**

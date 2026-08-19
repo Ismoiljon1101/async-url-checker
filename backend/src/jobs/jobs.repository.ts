@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Job } from '../types';
+import { Job } from './types';
 
 /**
  * In-memory job store. This is the persistence boundary: the service talks only

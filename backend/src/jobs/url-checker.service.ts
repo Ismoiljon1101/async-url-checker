@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { runWithConcurrency } from '../../../common/utils/concurrency';
-import { UrlStatus } from '../enums';
-import { UrlResult } from '../types';
+import { runWithConcurrency } from '../common/utils/concurrency';
+import { UrlStatus } from './enums';
+import { UrlResult } from './types';
 
 /**
  * Concurrency is fixed at 5 by the spec. The artificial delay and request

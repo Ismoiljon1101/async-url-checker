@@ -7,9 +7,9 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
-import { CreateJobDto } from '../dto/create-job.dto';
-import { JobsService } from '../services/jobs.service';
-import { JobDetail, JobSummary } from '../types';
+import { CreateJobDto } from './dto/create-job.dto';
+import { JobsService } from './jobs.service';
+import { JobDetail, JobSummary } from './types';
 
 /**
  * The MVC controller for jobs: it maps HTTP routes to service calls and nothing

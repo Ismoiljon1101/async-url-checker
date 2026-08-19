@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { JobStatus, UrlStatus } from '../src/modules/jobs/enums';
-import { JobsRepository } from '../src/modules/jobs/repositories/jobs.repository';
-import { JobsService } from '../src/modules/jobs/services/jobs.service';
-import { UrlCheckerService } from '../src/modules/jobs/services/url-checker.service';
+import { JobStatus, UrlStatus } from '../src/jobs/enums';
+import { JobsRepository } from '../src/jobs/jobs.repository';
+import { JobsService } from '../src/jobs/jobs.service';
+import { UrlCheckerService } from '../src/jobs/url-checker.service';
 
 // The service is wired with its real collaborators (repository + checker), the
 // same graph the module builds. `fetch` is mocked and the delay is forced to 0
