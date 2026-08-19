@@ -1,12 +1,18 @@
 /**
- * Tiny fetch wrapper shared across features. Centralizes JSON parsing and turns
- * a non-2xx response into a thrown Error carrying the server's message, so
- * callers only deal with resolved data or a catch.
+ * Tiny fetch wrapper shared across features. Centralizes JSON parsing, turns a
+ * non-2xx response into a thrown Error, and adds conditional GETs: it remembers
+ * each URL's ETag and sends If-None-Match, so an unchanged poll comes back as a
+ * 304 with no body and returns NOT_MODIFIED instead of re-parsing the same data.
  */
+
+export const NOT_MODIFIED = Symbol('not-modified');
+export type NotModified = typeof NOT_MODIFIED;
 
 interface ApiErrorBody {
   message?: string | string[];
 }
+
+const etags = new Map<string, string>();
 
 async function parse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -27,8 +33,18 @@ async function parse<T>(res: Response): Promise<T> {
 }
 
 export const http = {
-  get<T>(url: string): Promise<T> {
-    return fetch(url).then((res) => parse<T>(res));
+  /** Conditional GET: returns NOT_MODIFIED when the resource is unchanged. */
+  async get<T>(url: string): Promise<T | NotModified> {
+    const headers: Record<string, string> = {};
+    const known = etags.get(url);
+    if (known) headers['If-None-Match'] = known;
+
+    const res = await fetch(url, { headers });
+    if (res.status === 304) return NOT_MODIFIED;
+
+    const etag = res.headers.get('ETag');
+    if (etag) etags.set(url, etag);
+    return parse<T>(res);
   },
 
   post<T>(url: string, body: unknown): Promise<T> {

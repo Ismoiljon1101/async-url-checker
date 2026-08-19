@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { jobsApi } from '@/features/jobs/api/jobs.api';
+import { NOT_MODIFIED } from '@/shared/api/http';
 import {
   isTerminal,
   type JobDetail,
@@ -29,7 +30,8 @@ export const useJobsStore = create<JobsState>((set, get) => ({
 
   async refreshList() {
     try {
-      set({ jobs: await jobsApi.list() });
+      const result = await jobsApi.list();
+      if (result !== NOT_MODIFIED) set({ jobs: result }); // 304 → keep current
     } catch (err) {
       set({ error: (err as Error).message });
     }
@@ -48,6 +50,7 @@ export const useJobsStore = create<JobsState>((set, get) => ({
     if (!id) return;
     try {
       const job = await jobsApi.getById(id);
+      if (job === NOT_MODIFIED) return; // 304 → nothing changed, keep current
       // Guard against a response that arrives after the user switched jobs.
       if (get().selectedId === id) set({ selectedJob: job });
     } catch (err) {
