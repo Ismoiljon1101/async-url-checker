@@ -229,6 +229,58 @@ describe('JobsService', () => {
     assert.equal(s.inProgress, 0);
   });
 
+  it('a URL cancelled before it starts has no timing', () => {
+    mockFetch(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          );
+        }),
+    );
+
+    // Cancel synchronously after create(), before the deferred process() runs,
+    // so every URL is still pending and never entered processing.
+    const created = service.create(['https://x.test', 'https://y.test']);
+    service.cancel(created.id);
+
+    for (const r of service.detail(created.id).results) {
+      assert.equal(r.status, UrlStatus.Cancelled);
+      assert.equal(r.startedAt, null);
+      assert.equal(r.finishedAt, null);
+      assert.equal(r.durationMs, null);
+    }
+  });
+
+  it('cancelling an in-flight URL does not mutate it afterwards (stable ETag)', async () => {
+    mockFetch(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          );
+        }),
+    );
+
+    const created = service.create(['https://a.test']);
+    // Let process() start and the HEAD go in flight before cancelling.
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setTimeout(r, 10));
+
+    service.cancel(created.id);
+    const etagAtCancel = service.detailEtag(created.id);
+    const reqAtCancel = service.detail(created.id).results[0].requestMs;
+
+    // Let the aborted fetch reject and its finally run.
+    await new Promise((r) => setTimeout(r, 25));
+    const etagLater = service.detailEtag(created.id);
+    const reqLater = service.detail(created.id).results[0].requestMs;
+
+    assert.equal(reqAtCancel, null);
+    assert.equal(reqLater, null); // never stamped on the abort path
+    assert.equal(etagLater, etagAtCancel); // body unchanged → no stale 304
+  });
+
   it('lists jobs newest-first', async () => {
     mockFetch(async () => new Response(null, { status: 200 }));
 
