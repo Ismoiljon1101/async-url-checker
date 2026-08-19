@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useJobsStore } from '@/features/jobs/store/jobs.store';
+import { useI18n } from '@/shared/i18n/i18n';
 
 const PLACEHOLDER = `https://example.com
 https://github.com
@@ -13,6 +14,7 @@ function parseUrls(raw: string): string[] {
 }
 
 export function JobForm() {
+  const { t } = useI18n();
   const [raw, setRaw] = useState('');
   const creating = useJobsStore((s) => s.creating);
   const createJob = useJobsStore((s) => s.createJob);
@@ -29,7 +31,7 @@ export function JobForm() {
   return (
     <form className="form" onSubmit={submit}>
       <label className="form__label" htmlFor="urls">
-        URLs to check <span className="muted">(one per line)</span>
+        {t('form.label')} <span className="muted">{t('form.hint')}</span>
       </label>
       <textarea
         id="urls"
@@ -41,9 +43,9 @@ export function JobForm() {
         spellCheck={false}
       />
       <div className="form__actions">
-        <span className="muted">{urls.length} URL(s)</span>
+        <span className="muted">{t('form.count', { n: urls.length })}</span>
         <button className="btn btn--primary" disabled={!urls.length || creating}>
-          {creating ? 'Starting…' : 'Start check'}
+          {creating ? t('form.submitting') : t('form.submit')}
         </button>
       </div>
     </form>

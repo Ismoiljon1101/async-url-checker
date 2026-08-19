@@ -1,5 +1,6 @@
 import { useJobsStore } from '@/features/jobs/store/jobs.store';
 import { isTerminal, type UrlResult } from '@/features/jobs/types';
+import { useI18n } from '@/shared/i18n/i18n';
 import { StatusBadge } from '@/shared/ui/StatusBadge';
 
 function ResultRow({ result }: { result: UrlResult }) {
@@ -21,15 +22,16 @@ function ResultRow({ result }: { result: UrlResult }) {
 }
 
 export function JobDetail() {
+  const { t } = useI18n();
   const job = useJobsStore((s) => s.selectedJob);
   const selectedId = useJobsStore((s) => s.selectedId);
   const cancel = useJobsStore((s) => s.cancelSelected);
 
   if (!selectedId) {
-    return <p className="muted empty">Select a job to see its URLs.</p>;
+    return <p className="muted empty">{t('detail.selectPrompt')}</p>;
   }
   if (!job) {
-    return <p className="muted empty">Loading…</p>;
+    return <p className="muted empty">{t('detail.loading')}</p>;
   }
 
   const { stats } = job;
@@ -46,12 +48,17 @@ export function JobDetail() {
             <code className="muted">{job.id}</code>
           </div>
           <p className="muted detail__sub">
-            {checked}/{stats.total} checked · {stats.success} ok · {stats.failed} failed
+            {t('stats.line', {
+              checked,
+              total: stats.total,
+              ok: stats.success,
+              failed: stats.failed,
+            })}
           </p>
         </div>
         {active && (
           <button className="btn btn--danger" onClick={() => void cancel()}>
-            Cancel job
+            {t('detail.cancel')}
           </button>
         )}
       </header>
@@ -63,11 +70,11 @@ export function JobDetail() {
       <table className="results">
         <thead>
           <tr>
-            <th>URL</th>
-            <th>Status</th>
-            <th className="cell-num">HTTP</th>
-            <th className="cell-num">Time</th>
-            <th>Error</th>
+            <th>{t('table.url')}</th>
+            <th>{t('table.status')}</th>
+            <th className="cell-num">{t('table.http')}</th>
+            <th className="cell-num">{t('table.time')}</th>
+            <th>{t('table.error')}</th>
           </tr>
         </thead>
         <tbody>

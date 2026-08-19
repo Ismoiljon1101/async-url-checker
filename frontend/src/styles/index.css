@@ -32,9 +32,43 @@ body {
   padding: 32px 24px 64px;
 }
 
+.app__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .app__header h1 {
   margin: 0 0 4px;
   font-size: 22px;
+}
+
+/* Language switcher */
+.langswitch {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.langswitch__btn {
+  background: var(--panel);
+  color: var(--muted);
+  border: none;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.langswitch__btn + .langswitch__btn {
+  border-left: 1px solid var(--border);
+}
+
+.langswitch__btn--active {
+  background: var(--accent);
+  color: #fff;
 }
 
 .muted {

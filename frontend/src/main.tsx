@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from '@/app/App';
+import { I18nProvider } from '@/shared/i18n/i18n';
 import '@/styles/index.css';
 
 const container = document.getElementById('root');
@@ -8,6 +9,8 @@ if (!container) throw new Error('Root element #root not found');
 
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <I18nProvider>
+      <App />
+    </I18nProvider>
   </StrictMode>,
 );
