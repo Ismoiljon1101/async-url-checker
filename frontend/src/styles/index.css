@@ -338,7 +338,8 @@ body {
   border-color: var(--warn);
 }
 
-.badge--failed {
+.badge--failed,
+.badge--error {
   color: var(--fail);
   border-color: var(--fail);
 }

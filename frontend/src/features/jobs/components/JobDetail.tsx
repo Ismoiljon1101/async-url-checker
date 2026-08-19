@@ -3,6 +3,13 @@ import { isTerminal, type UrlResult } from '@/features/jobs/types';
 import { useI18n } from '@/shared/i18n/i18n';
 import { StatusBadge } from '@/shared/ui/StatusBadge';
 
+/** The full processing window, shown on hover; the cell itself shows the request. */
+function timingTitle(result: UrlResult): string | undefined {
+  if (!result.startedAt) return undefined;
+  const total = result.durationMs != null ? ` (${result.durationMs}ms total)` : '';
+  return `${result.startedAt} → ${result.finishedAt ?? '…'}${total}`;
+}
+
 function ResultRow({ result }: { result: UrlResult }) {
   return (
     <tr>
@@ -13,8 +20,10 @@ function ResultRow({ result }: { result: UrlResult }) {
         <StatusBadge status={result.status} />
       </td>
       <td className="cell-num">{result.httpStatus ?? '—'}</td>
-      <td className="cell-num">
-        {result.durationMs !== null ? `${result.durationMs}ms` : '—'}
+      <td className="cell-num" title={timingTitle(result)}>
+        {/* `!= null` on purpose: it catches undefined too, so a field the
+            server has not sent renders as a dash, never "undefinedms". */}
+        {result.requestMs != null ? `${result.requestMs}ms` : '—'}
       </td>
       <td className="cell-error muted">{result.error ?? ''}</td>
     </tr>
@@ -35,7 +44,9 @@ export function JobDetail() {
   }
 
   const { stats } = job;
-  const checked = stats.success + stats.failed;
+  // "X of Y processed" counts URLs that actually got a verdict. A cancelled
+  // URL was never checked, so it is reported separately rather than folded in.
+  const checked = stats.success + stats.error;
   // floor, not round: 199/200 must not display as a finished 100%.
   const pct = stats.total
     ? Math.min(100, Math.floor((checked / stats.total) * 100))
@@ -55,7 +66,7 @@ export function JobDetail() {
               checked,
               total: stats.total,
               ok: stats.success,
-              failed: stats.failed,
+              failed: stats.error,
             })}
           </p>
         </div>

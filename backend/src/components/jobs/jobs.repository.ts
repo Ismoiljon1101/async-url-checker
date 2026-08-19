@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { isTerminalJobStatus } from '../../libs/enums';
 import { Job } from '../../libs/types';
+import { intFromEnv } from '../../libs/utils/env';
 
 /**
  * In-memory job store. This is the persistence boundary: the service talks only
@@ -8,18 +9,26 @@ import { Job } from '../../libs/types';
  * change confined to this class, and nothing above it moves.
  *
  * The Map is used as an ordered structure (insertion order == creation order),
- * which makes both "newest first" and LRU-style eviction O(n)/O(1) with no
- * sorting. Memory is capped: once over MAX_JOBS, the oldest *terminal* job is
- * evicted, so a long-lived process doesn't grow without bound while active jobs
- * are never dropped mid-run.
+ * which makes both "newest first" and oldest-first eviction O(n)/O(1) with no
+ * sorting.
+ *
+ * Memory is genuinely bounded at MAX_JOBS. Admitting a new job first drains
+ * finished ones, oldest first; if every retained job is still running, the new
+ * job is refused rather than admitted. Refusing a create is the only option
+ * that bounds memory without killing work someone is waiting on.
  */
 @Injectable()
 export class JobsRepository {
   private readonly jobs = new Map<string, Job>();
 
-  save(job: Job): void {
+  /**
+   * Admits a job, evicting finished ones to stay under the cap. Returns false
+   * when the store is full of active jobs; the job is not stored in that case.
+   */
+  save(job: Job): boolean {
+    if (!this.jobs.has(job.id) && !this.makeRoom()) return false;
     this.jobs.set(job.id, job);
-    this.evictIfNeeded();
+    return true;
   }
 
   findById(id: string): Job | undefined {
@@ -41,17 +50,29 @@ export class JobsRepository {
 
   /** Cap on retained jobs; override with MAX_JOBS (read at call time). */
   private maxJobs(): number {
-    return Number(process.env.MAX_JOBS ?? 500);
+    return intFromEnv(process.env.MAX_JOBS, 500, 1, 100_000);
   }
 
-  private evictIfNeeded(): void {
-    if (this.jobs.size <= this.maxJobs()) return;
-    // Oldest first; evict the first job that has finished. Active jobs stay.
-    for (const [id, job] of this.jobs) {
-      if (isTerminalJobStatus(job.status)) {
-        this.jobs.delete(id);
-        return;
-      }
+  /**
+   * Drains finished jobs, oldest first, until there is room for one more. Loops
+   * rather than evicting once per save: a burst of concurrent jobs can leave
+   * the store well over the cap, and a single eviction per admission would let
+   * that high-water mark stand forever.
+   */
+  private makeRoom(): boolean {
+    const max = this.maxJobs();
+    while (this.jobs.size >= max) {
+      const finished = this.oldestTerminalId();
+      if (finished === undefined) return false;
+      this.jobs.delete(finished);
     }
+    return true;
+  }
+
+  private oldestTerminalId(): string | undefined {
+    for (const [id, job] of this.jobs) {
+      if (isTerminalJobStatus(job.status)) return id;
+    }
+    return undefined;
   }
 }

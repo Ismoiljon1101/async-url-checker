@@ -69,11 +69,13 @@ describe('JobsService', () => {
     const job = service.detail(created.id);
     assert.equal(job.status, JobStatus.Completed);
     assert.equal(job.stats.success, 2);
-    assert.equal(job.stats.failed, 0);
+    assert.equal(job.stats.error, 0);
     for (const r of job.results) {
       assert.equal(r.status, UrlStatus.Success);
       assert.equal(r.httpStatus, 200);
       assert.ok(r.durationMs !== null && r.durationMs >= 0);
+      assert.ok(r.requestMs !== null && r.requestMs >= 0);
+      assert.ok(r.startedAt !== null && r.finishedAt !== null);
     }
   });
 
@@ -84,7 +86,7 @@ describe('JobsService', () => {
     await waitForTerminal(service, created.id);
 
     const [result] = service.detail(created.id).results;
-    assert.equal(result.status, UrlStatus.Failed);
+    assert.equal(result.status, UrlStatus.Error);
     assert.equal(result.httpStatus, 404);
     assert.equal(result.error, 'HTTP 404');
   });
@@ -98,7 +100,7 @@ describe('JobsService', () => {
     await waitForTerminal(service, created.id);
 
     const [result] = service.detail(created.id).results;
-    assert.equal(result.status, UrlStatus.Failed);
+    assert.equal(result.status, UrlStatus.Error);
     assert.equal(result.httpStatus, null);
     assert.match(result.error ?? '', /ENOTFOUND/);
   });
@@ -169,9 +171,10 @@ describe('JobsService', () => {
     const job = service.detail(created.id);
     assert.equal(job.status, JobStatus.Cancelled);
     for (const r of job.results) {
-      assert.equal(r.status, UrlStatus.Failed);
-      assert.equal(r.error, 'Cancelled');
+      assert.equal(r.status, UrlStatus.Cancelled);
     }
+    assert.equal(job.stats.cancelled, 3);
+    assert.equal(job.stats.error, 0);
   });
 
   it('rejects a non-http URL with a clean error', async () => {
@@ -182,7 +185,7 @@ describe('JobsService', () => {
 
     const results = service.detail(created.id).results;
     for (const r of results) {
-      assert.equal(r.status, UrlStatus.Failed);
+      assert.equal(r.status, UrlStatus.Error);
       assert.equal(r.error, 'Invalid URL');
       assert.equal(r.httpStatus, null);
     }
@@ -199,12 +202,15 @@ describe('JobsService', () => {
     assert.equal(s.total, 4);
     assert.equal(s.pending, 0);
     assert.equal(s.inProgress, 0);
-    assert.equal(s.success + s.failed, 4);
+    assert.equal(s.success + s.error, 4);
     // the incremental counters must always sum back to total
-    assert.equal(s.pending + s.inProgress + s.success + s.failed, s.total);
+    assert.equal(
+      s.pending + s.inProgress + s.success + s.error + s.cancelled,
+      s.total,
+    );
   });
 
-  it('cancel drives every URL into the failed tally', () => {
+  it('cancel drives every URL into the cancelled tally', () => {
     mockFetch(
       (_input, init) =>
         new Promise((_resolve, reject) => {
@@ -216,7 +222,9 @@ describe('JobsService', () => {
 
     const created = service.create(['x.test', 'y.test', 'z.test']);
     const s = service.cancel(created.id).stats;
-    assert.equal(s.failed, 3);
+    // Not `error`: these URLs were never checked, so they did not fail.
+    assert.equal(s.cancelled, 3);
+    assert.equal(s.error, 0);
     assert.equal(s.pending, 0);
     assert.equal(s.inProgress, 0);
   });
@@ -262,7 +270,14 @@ describe('JobsRepository (bounded store)', () => {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     results: [],
-    stats: { total: 0, pending: 0, inProgress: 0, success: 0, failed: 0 },
+    stats: {
+      total: 0,
+      pending: 0,
+      inProgress: 0,
+      success: 0,
+      error: 0,
+      cancelled: 0,
+    },
     version: 0,
     abort: new AbortController(),
   });

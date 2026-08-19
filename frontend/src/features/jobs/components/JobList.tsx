@@ -16,12 +16,15 @@ function relativeTime(iso: string, t: Translate): string {
 
 function statsLine(job: JobSummary, t: Translate): string {
   const { stats } = job;
-  return t('stats.line', {
-    checked: stats.success + stats.failed,
+  const line = t('stats.line', {
+    checked: stats.success + stats.error,
     total: stats.total,
     ok: stats.success,
-    failed: stats.failed,
+    failed: stats.error,
   });
+  return stats.cancelled
+    ? line + t('stats.cancelled', { n: stats.cancelled })
+    : line;
 }
 
 function JobRow({ job, active }: { job: JobSummary; active: boolean }) {

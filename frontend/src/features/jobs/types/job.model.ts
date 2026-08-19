@@ -7,7 +7,13 @@ export interface UrlResult {
   status: UrlStatus;
   httpStatus: number | null;
   error: string | null;
+  /** When this URL entered processing, and when it left it. */
+  startedAt: string | null;
+  finishedAt: string | null;
+  /** finishedAt - startedAt, so it includes the artificial delay. */
   durationMs: number | null;
+  /** The HEAD request on its own — the number that says something about the URL. */
+  requestMs: number | null;
 }
 
 export interface UrlStats {
@@ -15,7 +21,13 @@ export interface UrlStats {
   pending: number;
   inProgress: number;
   success: number;
-  failed: number;
+  error: number;
+  cancelled: number;
+}
+
+/** POST /api/jobs answers with `jobId` alongside the summary. */
+export interface JobCreated extends JobSummary {
+  jobId: string;
 }
 
 export interface JobSummary {

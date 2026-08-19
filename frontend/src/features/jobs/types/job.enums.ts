@@ -15,7 +15,8 @@ export enum UrlStatus {
   Pending = 'pending',
   InProgress = 'in_progress',
   Success = 'success',
-  Failed = 'failed',
+  Error = 'error',
+  Cancelled = 'cancelled',
 }
 
 const TERMINAL: readonly JobStatus[] = [

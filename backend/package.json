@@ -9,7 +9,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
-    "test": "node --import tsx --test test/jobs.service.test.ts"
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

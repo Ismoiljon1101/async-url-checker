@@ -20,7 +20,8 @@ const en = {
 
   'list.recent': 'Recent jobs',
   'list.empty': 'No jobs yet. Start one above.',
-  'stats.line': '{checked}/{total} checked · {ok} ok · {failed} failed',
+  'stats.line': '{checked} of {total} processed · {ok} ok · {failed} error',
+  'stats.cancelled': ' · {n} cancelled',
 
   'detail.selectPrompt': 'Select a job to see its URLs.',
   'detail.loading': 'Loading…',
@@ -39,6 +40,7 @@ const en = {
   'status.cancelled': 'Cancelled',
   'status.failed': 'Failed',
   'status.success': 'OK',
+  'status.error': 'Error',
 
   'time.seconds': '{n}s ago',
   'time.minutes': '{n}m ago',
@@ -60,7 +62,8 @@ const ru: Record<TranslationKey, string> = {
 
   'list.recent': 'Последние задачи',
   'list.empty': 'Пока нет задач. Запустите проверку выше.',
-  'stats.line': '{checked}/{total} проверено · {ok} успешно · {failed} с ошибкой',
+  'stats.line': '{checked} из {total} обработано · {ok} успешно · {failed} с ошибкой',
+  'stats.cancelled': ' · {n} отменено',
 
   'detail.selectPrompt': 'Выберите задачу, чтобы увидеть её URL.',
   'detail.loading': 'Загрузка…',
@@ -79,6 +82,7 @@ const ru: Record<TranslationKey, string> = {
   'status.cancelled': 'Отменено',
   'status.failed': 'Ошибка',
   'status.success': 'OK',
+  'status.error': 'Ошибка',
 
   'time.seconds': '{n} с назад',
   'time.minutes': '{n} мин назад',

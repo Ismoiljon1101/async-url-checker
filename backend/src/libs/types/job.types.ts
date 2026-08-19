@@ -13,8 +13,22 @@ export interface UrlResult {
   httpStatus: number | null;
   /** Error message when the check failed; null otherwise. */
   error: string | null;
-  /** Wall-clock time the HEAD request took, in milliseconds. */
+  /** ISO timestamp when this URL entered processing; null while queued. */
+  startedAt: string | null;
+  /** ISO timestamp when this URL reached a terminal state; null until then. */
+  finishedAt: string | null;
+  /**
+   * Total processing time in milliseconds: finishedAt - startedAt, so it
+   * includes the artificial delay. This is the number that matches the two
+   * timestamps either side of it.
+   */
   durationMs: number | null;
+  /**
+   * Wall-clock time the HEAD request itself took, excluding the artificial
+   * delay. This is the one that says anything about the URL; `durationMs`
+   * mostly measures the delay.
+   */
+  requestMs: number | null;
 }
 
 export interface UrlStats {
@@ -22,7 +36,8 @@ export interface UrlStats {
   pending: number;
   inProgress: number;
   success: number;
-  failed: number;
+  error: number;
+  cancelled: number;
 }
 
 /** Internal record kept in the in-memory repository. Not serialized as-is. */
@@ -58,4 +73,14 @@ export interface JobSummary {
 /** GET /api/jobs/:id — detail view, includes every URL result. */
 export interface JobDetail extends JobSummary {
   results: UrlResult[];
+}
+
+/**
+ * POST /api/jobs — the assignment specifies the response as `{ "jobId": "..." }`,
+ * so `jobId` is the field the contract names. The summary is carried alongside
+ * it (same `id`, plus status and stats) so the client can render the new job
+ * without a second round trip.
+ */
+export interface JobCreated extends JobSummary {
+  jobId: string;
 }

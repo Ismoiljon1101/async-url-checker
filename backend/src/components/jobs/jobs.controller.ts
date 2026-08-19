@@ -11,7 +11,8 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { CreateJobDto } from '../../libs/dto/create-job.dto';
-import { JobDetail, JobSummary } from '../../libs/types';
+import { JobCreated, JobDetail, JobSummary } from '../../libs/types';
+import { isEtagMatch } from '../../libs/utils/etag';
 import { JobsService } from './jobs.service';
 
 /**
@@ -25,7 +26,7 @@ export class JobsController {
 
   @Post()
   @HttpCode(201)
-  create(@Body() dto: CreateJobDto): JobSummary {
+  create(@Body() dto: CreateJobDto): JobCreated {
     return this.jobsService.create(dto.urls);
   }
 
@@ -35,8 +36,8 @@ export class JobsController {
     @Res({ passthrough: true }) res: Response,
   ): JobSummary[] | undefined {
     const etag = this.jobsService.listEtag();
-    res.setHeader('ETag', etag);
-    if (ifNoneMatch === etag) {
+    this.setValidators(res, etag);
+    if (isEtagMatch(ifNoneMatch, etag)) {
       res.status(304);
       return undefined;
     }
@@ -50,12 +51,23 @@ export class JobsController {
     @Res({ passthrough: true }) res: Response,
   ): JobDetail | undefined {
     const etag = this.jobsService.detailEtag(id); // throws 404 if unknown
-    res.setHeader('ETag', etag);
-    if (ifNoneMatch === etag) {
+    this.setValidators(res, etag);
+    if (isEtagMatch(ifNoneMatch, etag)) {
       res.status(304);
       return undefined;
     }
     return this.jobsService.detail(id);
+  }
+
+  /**
+   * Job state is live, so a cached copy is never good enough on its own:
+   * `no-cache` tells the client to keep the body but revalidate every time,
+   * which is exactly the conditional-GET loop the polling frontend runs.
+   * RFC 9110 §15.4.5 requires the same header on the 304, hence one helper.
+   */
+  private setValidators(res: Response, etag: string): void {
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'no-cache');
   }
 
   @Delete(':id')

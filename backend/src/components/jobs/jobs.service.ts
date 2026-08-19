@@ -1,8 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { JobStatus, UrlStatus, isTerminalJobStatus } from '../../libs/enums';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import {
+  JobStatus,
+  UrlStatus,
+  isTerminalJobStatus,
+  isTerminalUrlStatus,
+} from '../../libs/enums';
 import {
   Job,
+  JobCreated,
   JobDetail,
   JobSummary,
   UrlResult,
@@ -12,12 +23,21 @@ import { normalizeUrl } from '../../libs/utils/url';
 import { JobsRepository } from './jobs.repository';
 import { UrlCheckerService } from './url-checker.service';
 
+/**
+ * Identifies this process. The store is in-memory, so a restart throws the data
+ * away while clients keep their cached validators; without this, a fresh
+ * counter climbing back through the same numbers would answer 304 for a job
+ * list that no longer exists. Scoping the tag to a boot makes that impossible.
+ */
+const BOOT_ID = randomUUID().slice(0, 8);
+
 /** Maps a URL status to its counter bucket in UrlStats (total is fixed). */
 const STATS_KEY: Record<UrlStatus, keyof Omit<UrlStats, 'total'>> = {
   [UrlStatus.Pending]: 'pending',
   [UrlStatus.InProgress]: 'inProgress',
   [UrlStatus.Success]: 'success',
-  [UrlStatus.Failed]: 'failed',
+  [UrlStatus.Error]: 'error',
+  [UrlStatus.Cancelled]: 'cancelled',
 };
 
 /**
@@ -36,14 +56,17 @@ export class JobsService {
     private readonly checker: UrlCheckerService,
   ) {}
 
-  create(urls: string[]): JobSummary {
+  create(urls: string[]): JobCreated {
     const now = new Date().toISOString();
     const results = urls.map<UrlResult>((url) => ({
       url: normalizeUrl(url),
       status: UrlStatus.Pending,
       httpStatus: null,
       error: null,
+      startedAt: null,
+      finishedAt: null,
       durationMs: null,
+      requestMs: null,
     }));
     const job: Job = {
       id: randomUUID(),
@@ -58,10 +81,15 @@ export class JobsService {
         pending: results.length,
         inProgress: 0,
         success: 0,
-        failed: 0,
+        error: 0,
+        cancelled: 0,
       },
     };
-    this.repository.save(job);
+    if (!this.repository.save(job)) {
+      throw new ServiceUnavailableException(
+        'Too many jobs are still running; retry once some finish',
+      );
+    }
     this.globalVersion += 1; // the job set changed → invalidate the list ETag
 
     // Snapshot the summary while the job is still `pending`, then defer the run
@@ -69,7 +97,9 @@ export class JobsService {
     // sees `in_progress` on the next request. The floated promise carries its
     // own catch so nothing before the try inside process() can escape as an
     // unhandled rejection.
-    const summary = this.toSummary(job);
+    // The assignment names the response `{ "jobId": "..." }`; the summary rides
+    // along so the client can render the job without a second round trip.
+    const created: JobCreated = { jobId: job.id, ...this.toSummary(job) };
     setImmediate(() => {
       this.process(job).catch((err: unknown) => {
         this.logger.error(
@@ -80,7 +110,7 @@ export class JobsService {
       });
     });
 
-    return summary;
+    return created;
   }
 
   list(): JobSummary[] {
@@ -96,14 +126,10 @@ export class JobsService {
     const job = this.getOrThrow(id);
     if (!isTerminalJobStatus(job.status)) {
       job.abort.abort();
+      // A URL that never got a verdict is `cancelled`, not `error` — it wasn't
+      // checked and failed, it wasn't checked at all.
       for (const result of job.results) {
-        if (
-          result.status === UrlStatus.Pending ||
-          result.status === UrlStatus.InProgress
-        ) {
-          result.error = 'Cancelled';
-          this.transition(job, result, UrlStatus.Failed);
-        }
+        this.transition(job, result, UrlStatus.Cancelled);
       }
       this.setJobStatus(job, JobStatus.Cancelled);
     }
@@ -122,10 +148,11 @@ export class JobsService {
       // A cancel may have landed mid-run and already set the terminal status.
       // (Read through a predicate so the type checker doesn't narrow it away.)
       if (this.wasCancelled(job)) return;
-      // A finished run is Completed even if some URLs failed — per-URL failures
-      // live on each UrlResult, not on the job.
-      this.setJobStatus(job, JobStatus.Completed);
+      this.setJobStatus(job, this.outcome(job));
     } catch (err) {
+      // Stop the surviving workers before finalizing, otherwise they keep
+      // draining the queue and mutating a job the API already reported as done.
+      job.abort.abort();
       this.logger.error(
         `Job ${job.id} crashed`,
         err instanceof Error ? err.stack : String(err),
@@ -142,11 +169,30 @@ export class JobsService {
   private transition(job: Job, result: UrlResult, next: UrlStatus): void {
     const from = result.status;
     if (from === next) return;
-    if (from === UrlStatus.Success || from === UrlStatus.Failed) return;
+    if (isTerminalUrlStatus(from)) return;
     job.stats[STATS_KEY[from]] -= 1;
     job.stats[STATS_KEY[next]] += 1;
     result.status = next;
+    this.stampTimestamps(result, next);
     this.touch(job);
+  }
+
+  /**
+   * Records when a URL entered processing and when it left it. `durationMs`
+   * spans exactly those two marks, so the three fields always agree; the HEAD
+   * request's own timing lives separately in `requestMs`.
+   */
+  private stampTimestamps(result: UrlResult, next: UrlStatus): void {
+    const now = new Date();
+    if (next === UrlStatus.InProgress) {
+      result.startedAt = now.toISOString();
+      return;
+    }
+    if (!isTerminalUrlStatus(next)) return;
+    result.finishedAt = now.toISOString();
+    result.durationMs = result.startedAt
+      ? now.getTime() - new Date(result.startedAt).getTime()
+      : 0;
   }
 
   private getOrThrow(id: string): Job {
@@ -155,7 +201,21 @@ export class JobsService {
     return job;
   }
 
+  /**
+   * A run that finished is `completed`, unless every single URL failed — then
+   * nothing was actually reachable and the job itself failed. This is what
+   * makes `failed` a state the API can really reach; per-URL failures on a
+   * partially successful job stay on each UrlResult, not on the job.
+   */
+  private outcome(job: Job): JobStatus {
+    const { total, error } = job.stats;
+    return total > 0 && error === total ? JobStatus.Failed : JobStatus.Completed;
+  }
+
   private setJobStatus(job: Job, status: JobStatus): void {
+    // Terminal is terminal. Without this, a late rejection could rewrite a
+    // `cancelled` job as `failed` after the client already stopped polling.
+    if (isTerminalJobStatus(job.status)) return;
     job.status = status;
     this.touch(job);
   }
@@ -169,13 +229,13 @@ export class JobsService {
 
   /** Weak ETag for the list — changes whenever any job changes. */
   listEtag(): string {
-    return `W/"jobs-${this.globalVersion}"`;
+    return `W/"jobs-${BOOT_ID}-${this.globalVersion}"`;
   }
 
   /** Weak ETag for one job — changes only when that job changes. */
   detailEtag(id: string): string {
     const job = this.getOrThrow(id);
-    return `W/"${job.id}-${job.version}"`;
+    return `W/"${BOOT_ID}-${job.id}-${job.version}"`;
   }
 
   private wasCancelled(job: Job): boolean {

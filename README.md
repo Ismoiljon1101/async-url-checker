@@ -52,7 +52,7 @@ cd backend
 pnpm test
 ```
 
-Seven tests cover the parts that are easy to get wrong: the concurrency cap, cancellation, HTTP-code handling, and the `pending → in_progress → completed` transitions. They run against the services directly with `fetch` mocked, so the whole suite finishes in about a second.
+28 tests cover the parts that are easy to get wrong: the HEAD method, the concurrency cap (including the case where an env var tries to raise it), the artificial delay, cancellation, HTTP-code handling, URL normalization, every one of the six job statuses, the store's memory bound, and conditional-GET matching. They run against the services directly with `fetch` mocked, so the whole suite finishes in about a second.
 
 ## API
 
@@ -60,12 +60,26 @@ Base path `/api/jobs`. Every response uses the same status vocabulary defined in
 
 | Method | Path | Does |
 | --- | --- | --- |
-| `POST` | `/api/jobs` | Create a job. Body: `{ "urls": ["https://..."] }`. Returns the job with status `pending`. |
-| `GET` | `/api/jobs` | List jobs, newest first, each with rolled-up stats. |
-| `GET` | `/api/jobs/:id` | One job with the per-URL breakdown (status, HTTP code, error, timing). |
-| `DELETE` | `/api/jobs/:id` | Cancel a running job. |
+| `POST` | `/api/jobs` | Create a job. Body: `{ "urls": ["https://..."] }`. Answers `{ "jobId": "..." }` with status `pending`, plus the summary so the client can render it without a second call. |
+| `GET` | `/api/jobs` | List jobs, newest first: `id`, `createdAt`, `status`, and rolled-up stats. |
+| `GET` | `/api/jobs/:id` | One job with the per-URL breakdown. |
+| `DELETE` | `/api/jobs/:id` | Cancel a job. Stops queued and in-flight checks alike. |
+| `GET` | `/health` | Liveness, used by the compose healthcheck. |
 
-Job status is one of `pending`, `in_progress`, `completed`, `cancelled`, `failed`. Each URL carries its own `pending` / `in_progress` / `success` / `failed`.
+Job status is one of `pending`, `in_progress`, `completed`, `cancelled`, `failed`. Each URL carries its own `pending`, `in_progress`, `success`, `error`, `cancelled`.
+
+A URL that was cancelled is `cancelled`, never `error`. It was not checked and failed; it was not checked at all. Folding the two together would report a cancelled 1000-URL job as a thousand failures.
+
+Each URL result carries four timing fields:
+
+| Field | Means |
+| --- | --- |
+| `startedAt` | when the URL entered processing |
+| `finishedAt` | when it reached a terminal state |
+| `durationMs` | `finishedAt - startedAt`, so it includes the artificial delay |
+| `requestMs` | the HEAD request on its own |
+
+The two are separate on purpose. `durationMs` is mostly the artificial delay, so `requestMs` is the number that says anything about the URL, and it is the one the UI shows.
 
 Quick check with curl:
 

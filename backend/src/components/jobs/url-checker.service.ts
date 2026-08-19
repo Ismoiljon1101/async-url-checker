@@ -1,16 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { runWithConcurrency } from '../../libs/utils/concurrency';
+import { intFromEnv } from '../../libs/utils/env';
 import { UrlStatus } from '../../libs/enums';
 import { UrlResult } from '../../libs/types';
 import { toHttpUrl } from '../../libs/utils/url';
 
 /**
- * Concurrency is 5 by the spec. It's env-tunable (MAX_CONCURRENCY) only so the
- * value can be raised for local load-testing; the default keeps every job at
- * the required 5 concurrent checks. This is an I/O-bound wait, not CPU work, so
- * one event loop handles it — extra cores or worker threads add nothing.
+ * Concurrency is 5 by the spec, and MAX_CONCURRENCY can only lower it — the cap
+ * is clamped so no deployment can quietly exceed the required limit. This is an
+ * I/O-bound wait, not CPU work, so one event loop handles it; extra cores or
+ * worker threads add nothing.
  */
 export const DEFAULT_CONCURRENCY = 5;
+
+/** Spec ceilings. Env vars move within these, never past them. */
+const MAX_ALLOWED_CONCURRENCY = 5;
+const MAX_ALLOWED_DELAY_MS = 10_000;
 
 /**
  * HEAD is retried with GET on these statuses: some servers reject HEAD at the
@@ -57,15 +62,26 @@ export class UrlCheckerService {
     );
   }
 
-  // Read at call time (not import time) so tests/load runs can override via env.
+  // Read at call time (not import time) so tests can override via env. Each
+  // value is clamped, so a typo or an over-eager operator can't break the spec.
   private concurrency(): number {
-    return Number(process.env.MAX_CONCURRENCY ?? DEFAULT_CONCURRENCY);
+    return intFromEnv(
+      process.env.MAX_CONCURRENCY,
+      DEFAULT_CONCURRENCY,
+      1,
+      MAX_ALLOWED_CONCURRENCY,
+    );
   }
   private maxDelayMs(): number {
-    return Number(process.env.MAX_CHECK_DELAY_MS ?? 10_000);
+    return intFromEnv(
+      process.env.MAX_CHECK_DELAY_MS,
+      MAX_ALLOWED_DELAY_MS,
+      0,
+      MAX_ALLOWED_DELAY_MS,
+    );
   }
   private timeoutMs(): number {
-    return Number(process.env.CHECK_TIMEOUT_MS ?? 15_000);
+    return intFromEnv(process.env.CHECK_TIMEOUT_MS, 15_000, 1_000, 120_000);
   }
 
   private async checkOne(
@@ -80,7 +96,7 @@ export class UrlCheckerService {
     // message instead of a leaked "Failed to parse URL" from fetch.
     if (!toHttpUrl(result.url)) {
       result.error = 'Invalid URL';
-      setStatus(result, UrlStatus.Failed);
+      setStatus(result, UrlStatus.Error);
       return;
     }
 
@@ -98,16 +114,18 @@ export class UrlCheckerService {
       if (signal.aborted) return; // cancelled while awaiting; leave finalized
       result.httpStatus = response.status;
       result.error = response.ok ? null : `HTTP ${response.status}`;
-      setStatus(result, response.ok ? UrlStatus.Success : UrlStatus.Failed);
+      setStatus(result, response.ok ? UrlStatus.Success : UrlStatus.Error);
     } catch (err) {
       if (signal.aborted) return; // cancel() already finalized this URL
       result.httpStatus = null;
       result.error = this.describeError(err);
-      setStatus(result, UrlStatus.Failed);
+      setStatus(result, UrlStatus.Error);
     } finally {
       clearTimeout(timer);
       signal.removeEventListener('abort', onCancel);
-      result.durationMs = Date.now() - startedAt;
+      // Just the HEAD request. Total processing time, artificial delay
+      // included, is stamped by the service alongside the timestamps.
+      result.requestMs = Date.now() - startedAt;
     }
   }
 
