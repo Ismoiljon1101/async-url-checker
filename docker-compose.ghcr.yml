@@ -8,10 +8,20 @@ services:
       - "3000:3000"
     environment:
       MAX_CHECK_DELAY_MS: "10000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   frontend:
     image: ghcr.io/ismoiljon1101/async-url-checker-frontend:latest
     ports:
       - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
