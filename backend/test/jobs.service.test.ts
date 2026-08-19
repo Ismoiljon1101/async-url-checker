@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { JobStatus, UrlStatus } from '../src/libs/enums';
+import type { Job } from '../src/libs/types';
 import { JobsRepository } from '../src/components/jobs/jobs.repository';
 import { JobsService } from '../src/components/jobs/jobs.service';
 import { UrlCheckerService } from '../src/components/jobs/url-checker.service';
@@ -234,5 +235,61 @@ describe('JobsService', () => {
 
   it('throws NotFound for an unknown job id', () => {
     assert.throws(() => service.detail('does-not-exist'), /not found/i);
+  });
+
+  it('list ETag changes on add; detail ETag tracks a single job', async () => {
+    mockFetch(async () => new Response(null, { status: 200 }));
+
+    const before = service.listEtag();
+    const created = service.create(['https://a.test']);
+    assert.notEqual(service.listEtag(), before); // adding a job changed the list
+
+    const early = service.detailEtag(created.id);
+    await waitForTerminal(service, created.id);
+    assert.notEqual(service.detailEtag(created.id), early); // changed while running
+    assert.equal(service.detailEtag(created.id), service.detailEtag(created.id)); // stable
+  });
+
+  it('detailEtag throws NotFound for an unknown id', () => {
+    assert.throws(() => service.detailEtag('nope'), /not found/i);
+  });
+});
+
+describe('JobsRepository (bounded store)', () => {
+  const makeJob = (id: string, status: JobStatus): Job => ({
+    id,
+    status,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    results: [],
+    stats: { total: 0, pending: 0, inProgress: 0, success: 0, failed: 0 },
+    version: 0,
+    abort: new AbortController(),
+  });
+
+  afterEach(() => {
+    delete process.env.MAX_JOBS;
+  });
+
+  it('evicts the oldest terminal job past the cap', () => {
+    process.env.MAX_JOBS = '3';
+    const repo = new JobsRepository();
+    for (let i = 1; i <= 5; i++) {
+      repo.save(makeJob(`j${i}`, JobStatus.Completed));
+    }
+    assert.equal(repo.size(), 3);
+    assert.ok(repo.findById('j5'), 'newest kept');
+    assert.ok(!repo.findById('j1'), 'oldest evicted');
+  });
+
+  it('never evicts an active job', () => {
+    process.env.MAX_JOBS = '2';
+    const repo = new JobsRepository();
+    repo.save(makeJob('active', JobStatus.InProgress));
+    repo.save(makeJob('t1', JobStatus.Completed));
+    repo.save(makeJob('t2', JobStatus.Completed)); // size 3 > 2 → evict a terminal
+
+    assert.ok(repo.findById('active'), 'active job retained');
+    assert.equal(repo.size(), 2);
   });
 });
