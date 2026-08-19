@@ -52,7 +52,7 @@ cd backend
 pnpm test
 ```
 
-32 tests cover the parts that are easy to get wrong: the HEAD method, the concurrency cap (including the case where an env var tries to raise it), the artificial delay, cancellation, HTTP-code handling, URL normalization, all five job statuses and the `error` / `cancelled` split on URLs, the store's memory bound, and conditional-GET matching. They run against the services directly with `fetch` mocked, so the whole suite finishes in a couple of seconds.
+34 tests cover the parts that are easy to get wrong: the HEAD method, the concurrency cap (including the case where an env var tries to raise it), the artificial delay, cancellation, HTTP-code handling, URL normalization, all five job statuses and the `error` / `cancelled` split on URLs, per-URL timing consistency, the ETag staying stable after a cancel, the store's memory bound, and conditional-GET matching. They run against the services directly with `fetch` mocked, so the whole suite finishes in a couple of seconds.
 
 ## API
 
